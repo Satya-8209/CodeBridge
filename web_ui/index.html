@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Memory Agent</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 { font-size: 18px; font-weight: 600; }
+    header span { font-size: 13px; color: var(--muted); }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+    label:first-of-type { margin-top: 0; }
+
+    input, select, textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 100px; font-family: 'Menlo', 'Courier New', monospace; font-size: 12px; }
+
+    button {
+      margin-top: 16px;
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-success { background: var(--green); color: #0d1117; }
+    button:hover:not(:disabled) { opacity: 0.85; }
+
+    #result-panel {
+      grid-column: 1 / -1;
+      display: none;
+    }
+
+    .memory-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .memory-hit { background: rgba(63,185,80,0.15); border: 1px solid var(--green); color: var(--green); }
+    .memory-miss { background: rgba(210,153,34,0.15); border: 1px solid var(--yellow); color: var(--yellow); }
+
+    .past-incidents { margin-bottom: 16px; }
+    .past-incidents h3 { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .incident-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-family: 'Menlo', monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--muted);
+    }
+
+    .suggestion-box {
+      background: var(--surface2);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .suggestion-box h3 { font-size: 13px; color: var(--accent); margin-bottom: 10px; }
+    .suggestion-content {
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .alert-id-display {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 12px;
+      text-align: right;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed; top: 20px; right: 20px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 999;
+      display: none;
+    }
+    .toast.success { background: var(--green); color: #0d1117; }
+    .toast.error { background: var(--red); color: white; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:22px">🧠</span>
+  <div>
+    <h1>Incident Memory Agent</h1>
+    <span>DevOps on-call assistant powered by Hindsight + xAI Grok</span>
+  </div>
+  <span class="badge" id="status-badge">⚡ Ready</span>
+</header>
+
+<main>
+  <!-- ALERT FORM -->
+  <div class="card">
+    <h2>🚨 New Alert</h2>
+
+    <label>Service Name</label>
+    <input id="service" type="text" placeholder="e.g. payment-service" />
+
+    <label>Severity</label>
+    <select id="severity">
+      <option value="critical">🔴 Critical</option>
+      <option value="high" selected>🟠 High</option>
+      <option value="medium">🟡 Medium</option>
+      <option value="low">🟢 Low</option>
+    </select>
+
+    <label>Error Log / Alert Description</label>
+    <textarea id="error_log" placeholder="Paste your error log or describe the alert..."></textarea>
+
+    <button class="btn-danger" onclick="fireAlert()" id="alert-btn">
+      🚨 Fire Alert — Query Memory
+    </button>
+  </div>
+
+  <!-- RESOLVE FORM -->
+  <div class="card">
+    <h2>✅ Resolve & Store in Memory</h2>
+
+    <label>Alert ID (from result)</label>
+    <input id="resolve-alert-id" type="text" placeholder="e.g. A1B2C3D4" />
+
+    <label>Service</label>
+    <input id="resolve-service" type="text" placeholder="e.g. payment-service" />
+
+    <label>Incident Title</label>
+    <input id="resolve-title" type="text" placeholder="e.g. OOMKilled pod" />
+
+    <label>Root Cause</label>
+    <textarea id="resolve-cause" style="min-height:60px" placeholder="What caused the incident?"></textarea>
+
+    <label>Fix Applied</label>
+    <textarea id="resolve-fix" style="min-height:60px" placeholder="What fix resolved it?"></textarea>
+
+    <button class="btn-success" onclick="resolveIncident()" id="resolve-btn">
+      ✅ Store in Hindsight Memory
+    </button>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div class="card" id="result-panel">
+    <h2>🔍 Agent Response</h2>
+    <div id="memory-badge-container"></div>
+    <div class="past-incidents" id="past-incidents-container"></div>
+    <div class="suggestion-box">
+      <h3>💡 AI Suggestion (xAI Grok)</h3>
+      <div class="suggestion-content" id="suggestion-text"></div>
+    </div>
+    <div class="alert-id-display" id="alert-id-display"></div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = 'http://localhost:8000';
+
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type}`;
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 3500);
+  }
+
+  function setLoading(btnId, loading, label) {
+    const btn = document.getElementById(btnId);
+    if (loading) {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner"></span>${label}`;
+    } else {
+      btn.disabled = false;
+    }
+  }
+
+  async function fireAlert() {
+    const service = document.getElementById('service').value.trim();
+    const severity = document.getElementById('severity').value;
+    const error_log = document.getElementById('error_log').value.trim();
+
+    if (!service || !error_log) {
+      showToast('⚠️ Please fill in Service Name and Error Log.', 'error');
+      return;
+    }
+
+    setLoading('alert-btn', true, 'Querying Hindsight memory...');
+    document.getElementById('result-panel').style.display = 'none';
+    document.getElementById('status-badge').textContent = '🔍 Querying...';
+
+    try {
+      const resp = await fetch(`${API}/alert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: error_log.slice(0, 100), service, severity, error_log }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      renderResult(data, service);
+      document.getElementById('status-badge').textContent = '✅ Done';
+    } catch (e) {
+      showToast(`❌ Error: ${e.message}. Is the backend running?`, 'error');
+      document.getElementById('status-badge').textContent = '❌ Error';
+    } finally {
+      document.getElementById('alert-btn').disabled = false;
+      document.getElementById('alert-btn').innerHTML = '🚨 Fire Alert — Query Memory';
+    }
+  }
+
+  function renderResult(data, service) {
+    const panel = document.getElementById('result-panel');
+    panel.style.display = 'block';
+
+    // Memory badge
+    const badgeContainer = document.getElementById('memory-badge-container');
+    const count = data.similar_incidents ? data.similar_incidents.length : 0;
+    if (data.memory_hit) {
+      badgeContainer.innerHTML = `<div class="memory-badge memory-hit">🧠 Memory found ${count} similar past incident(s)</div>`;
+    } else {
+      badgeContainer.innerHTML = `<div class="memory-badge memory-miss">🆕 No similar past incidents found yet — building memory...</div>`;
+    }
+
+    // Past incidents
+    const pastContainer = document.getElementById('past-incidents-container');
+    if (count > 0) {
+      let html = '<h3>📋 Past Incidents Retrieved from Memory</h3>';
+      data.similar_incidents.slice(0, 3).forEach((inc, i) => {
+        const score = inc.score != null ? ` · Score: ${inc.score.toFixed(3)}` : '';
+        html += `<div class="incident-item"><strong>Past Incident ${i + 1}${score}</strong>\n${inc.text}</div>`;
+      });
+      pastContainer.innerHTML = html;
+      pastContainer.style.display = 'block';
+    } else {
+      pastContainer.innerHTML = '';
+      pastContainer.style.display = 'none';
+    }
+
+    // Suggestion
+    document.getElementById('suggestion-text').textContent = data.suggestion || 'No suggestion.';
+
+    // Alert ID
+    document.getElementById('alert-id-display').textContent = `Alert ID: ${data.alert_id} · Powered by Hindsight + xAI Grok`;
+
+    // Pre-fill the resolve form
+    document.getElementById('resolve-alert-id').value = data.alert_id;
+    document.getElementById('resolve-service').value = service;
+    document.getElementById('resolve-title').value = document.getElementById('error_log').value.slice(0, 80);
+
+    panel.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function resolveIncident() {
+    const alert_id = document.getElementById('resolve-alert-id').value.trim();
+    const service = document.getElementById('resolve-service').value.trim();
+    const title = document.getElementById('resolve-title').value.trim();
+    const root_cause = document.getElementById('resolve-cause').value.trim();
+    const fix_applied = document.getElementById('resolve-fix').value.trim();
+
+    if (!alert_id || !service || !root_cause || !fix_applied) {
+      showToast('⚠️ Please fill in all resolve fields.', 'error');
+      return;
+    }
+
+    setLoading('resolve-btn', true, 'Storing in memory...');
+
+    try {
+      const resp = await fetch(`${API}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alert_id, service, title, root_cause, fix_applied, time_to_resolve_minutes: 0 }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      showToast('✅ Incident stored in Hindsight memory! Future similar alerts will benefit.', 'success');
+      // Clear resolve form
+      ['resolve-alert-id','resolve-service','resolve-title','resolve-cause','resolve-fix'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+    } catch (e) {
+      showToast(`❌ Error: ${e.message}`, 'error');
+    } finally {
+      document.getElementById('resolve-btn').disabled = false;
+      document.getElementById('resolve-btn').innerHTML = '✅ Store in Hindsight Memory';
+    }
+  }
+
+  // Check backend health on load
+  window.addEventListener('load', async () => {
+    try {
+      const resp = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+      if (resp.ok) {
+        document.getElementById('status-badge').textContent = '✅ Backend Online';
+      }
+    } catch {
+      document.getElementById('status-badge').textContent = '❌ Backend Offline';
+      document.getElementById('status-badge').style.color = '#f85149';
+    }
+  });
+</script>
+</body>
+</html>

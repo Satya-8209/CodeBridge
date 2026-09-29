@@ -1,0 +1,58 @@
+[
+  {
+    "title": "OOMKilled: payment-service pod restarted 4 times in 10 minutes",
+    "service": "payment-service",
+    "root_cause": "Memory leak in Stripe webhook retry handler. Unbounded list accumulating failed webhook payloads on each retry. After ~500 retries the container hit its 512Mi memory limit.",
+    "fix_applied": "Rolled back deployment to v2.3.1 using `kubectl rollout undo deployment/payment-service`. Then patched the retry handler to cap the error list at 100 entries and push to a dead-letter queue instead. Redeployed v2.3.2.",
+    "time_to_resolve_minutes": 22
+  },
+  {
+    "title": "auth-service returning 503 — DB connection pool exhausted",
+    "service": "auth-service",
+    "root_cause": "pgbouncer max_client_conn was set to 20, a default from initial setup. After horizontal scaling to 8 replicas, each holding 5 idle connections, the pool was consistently exhausted under normal traffic.",
+    "fix_applied": "Updated pgbouncer.ini: max_client_conn=200, pool_size=20. Restarted pgbouncer pod via `kubectl rollout restart deployment/pgbouncer`. Confirmed connection count dropped below threshold.",
+    "time_to_resolve_minutes": 14
+  },
+  {
+    "title": "order-service pods in CrashLoopBackOff after deploy",
+    "service": "order-service",
+    "root_cause": "New deployment manifest missing envFrom secretRef for 'order-service-secrets'. The SECRET_KEY env var was absent, causing the app to panic on startup.",
+    "fix_applied": "Added `envFrom: - secretRef: name: order-service-secrets` to deployment.yaml. Ran `kubectl apply -f deployment.yaml`. Pods became Ready within 90 seconds.",
+    "time_to_resolve_minutes": 9
+  },
+  {
+    "title": "High latency on /api/checkout — p99 spiked to 8s",
+    "service": "checkout-service",
+    "root_cause": "N+1 query in the cart item resolver. Each cart item triggered a separate SELECT on the products table. A cart with 20 items fired 21 queries instead of 1.",
+    "fix_applied": "Added `select_related('product')` to the cart queryset. Deployed hotfix. p99 dropped back to 180ms within 2 minutes of deploy.",
+    "time_to_resolve_minutes": 45
+  },
+  {
+    "title": "Redis NOAUTH error — cache layer failing for all services",
+    "service": "redis-cluster",
+    "root_cause": "Redis was restarted by the node maintenance script and came back with requirepass enabled (from a config template change). Services were connecting with no password as they had before.",
+    "fix_applied": "Updated the REDIS_URL secret in k8s to include :password@ prefix. Rolled out config change to all 12 affected deployments using `kubectl set env`. Services recovered automatically as they reconnected.",
+    "time_to_resolve_minutes": 31
+  },
+  {
+    "title": "Kafka consumer lag growing — notification-service not processing events",
+    "service": "notification-service",
+    "root_cause": "Deserialization error on a new event schema introduced in v1.4. The consumer was silently failing and not committing offsets, causing lag to accumulate. The error was swallowed by a bare except clause.",
+    "fix_applied": "Deployed v1.4.1 with schema validation and explicit dead-letter routing for malformed events. Manually reset consumer offset to skip the 3000 malformed events. Consumer lag cleared in 8 minutes.",
+    "time_to_resolve_minutes": 67
+  },
+  {
+    "title": "Disk usage at 95% on Elasticsearch node — cluster yellow",
+    "service": "elasticsearch",
+    "root_cause": "Log retention policy was misconfigured: indices older than 7 days should auto-delete, but the ILM policy was attached to the wrong index pattern. Logs from 3 months were accumulating.",
+    "fix_applied": "Ran `DELETE /logs-*-2026.06.*` for June indices to reclaim immediate space. Fixed ILM policy to target `logs-*`. Set up Prometheus alert for disk > 80% per node.",
+    "time_to_resolve_minutes": 19
+  },
+  {
+    "title": "inventory-service 500 errors — foreign key constraint violation",
+    "service": "inventory-service",
+    "root_cause": "A data migration script ran in production without transactions. It deleted product category records that inventory items referenced. ~3000 rows left in an inconsistent state.",
+    "fix_applied": "Restored category records from RDS snapshot taken 2 hours prior using point-in-time recovery for just the `product_categories` table. Re-ran migration inside a transaction with proper dependency ordering.",
+    "time_to_resolve_minutes": 95
+  }
+]
